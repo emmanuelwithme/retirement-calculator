@@ -17,7 +17,7 @@
 
     <div class="max-w-6xl mx-auto">
         <h1 class="text-3xl font-bold text-center text-indigo-600 mb-2">小針子的動態退休金試算機 💰</h1>
-        <p class="text-center text-sm text-slate-400 mb-8">網頁&遞迴關係式撰寫 by遠謀</p>
+        <p class="text-center text-sm text-slate-400 mb-8">網頁撰寫by遠謀</p>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div class="lg:col-span-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -109,47 +109,111 @@
 
         const formatMoney = (num) => Math.round(num).toLocaleString('zh-TW');
 
+        function getNumberValue(el, fallback = 0) {
+            const value = Number(el.value);
+            return Number.isFinite(value) ? value : fallback;
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+
         function simulate(initial_asset, n, r, g, P) {
             let asset = initial_asset;
             let history = [asset];
+
             for (let i = 1; i <= n; i++) {
-                let withdraw = P * Math.pow(1 + g, i - 1);
+                const withdraw = P * Math.pow(1 + g, i - 1);
                 asset = (asset - withdraw) * (1 + r);
                 history.push(asset > 0 ? asset : 0);
             }
+
             return { final_asset: asset, history: history };
         }
 
         function findInitialAsset(n, r, g, P) {
-            let low = 0, high = Math.max(P * n, 1);
-            
-            // 動態尋找安全的上限值 (Exponential Search)
+            if (!Number.isFinite(n) || !Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(P)) {
+                throw new Error("參數必須是有效數字");
+            }
+
+            if (n < 1) {
+                throw new Error("退休年數必須至少為 1 年");
+            }
+
+            if (P < 0) {
+                throw new Error("每年花費不能是負數");
+            }
+
+            if (r <= -1) {
+                throw new Error("年報酬率不能小於或等於 -100%");
+            }
+
+            if (g <= -1) {
+                throw new Error("年通膨率不能小於或等於 -100%");
+            }
+
+            if (P === 0) {
+                return 0;
+            }
+
+            let low = 0;
+            let high = Math.max(P * n, 1);
+
+            let guard = 0;
+            // 指數搜尋加上 Guard 防護機制
             while (simulate(high, n, r, g, P).final_asset < 0) {
                 high *= 2;
+                guard++;
+
+                if (!Number.isFinite(high) || guard > 1000) {
+                    throw new Error("搜尋上限過大，請檢查輸入參數");
+                }
             }
 
             for (let i = 0; i < 100; i++) {
-                let mid = (low + high) / 2;
-                if (simulate(mid, n, r, g, P).final_asset > 0) high = mid;
-                else low = mid;
+                const mid = (low + high) / 2;
+                const result = simulate(mid, n, r, g, P).final_asset;
+
+                if (result > 0) {
+                    high = mid;
+                } else {
+                    low = mid;
+                }
             }
+
             return (low + high) / 2;
         }
 
         function updateApp() {
-            const pMonth = parseFloat(inputPMonth.value) || 0;
-            const n = parseInt(numN.value) || 0;
-            const r = parseFloat(numR.value) / 100 || 0;
-            const g = parseFloat(numG.value) / 100 || 0;
-            const P = pMonth * 12;
+            try {
+                const pMonth = getNumberValue(inputPMonth, 0);
+                const nRaw = getNumberValue(numN, 30);
+                const rRaw = getNumberValue(numR, 4.0);
+                const gRaw = getNumberValue(numG, 2.0);
 
-            valPYear.textContent = formatMoney(P);
-            resN.textContent = n;
-            const required = findInitialAsset(n, r, g, P);
-            resultAmount.textContent = formatMoney(required);
+                const n = Math.floor(clamp(nRaw, 1, 100));
+                const r = clamp(rRaw, -99.9, 100) / 100;
+                const g = clamp(gRaw, -99.9, 100) / 100;
+                const P = Math.max(pMonth, 0) * 12;
 
-            const data = simulate(required, n, r, g, P).history;
-            drawChart(data);
+                // 修正輸入框顯示被 clamp 後的值
+                inputPMonth.value = Math.max(pMonth, 0);
+                numN.value = n;
+                numR.value = rRaw;
+                numG.value = gRaw;
+
+                valPYear.textContent = formatMoney(P);
+                resN.textContent = n;
+
+                const required = findInitialAsset(n, r, g, P);
+                resultAmount.textContent = formatMoney(required);
+
+                const data = simulate(required, n, r, g, P).history;
+                drawChart(data);
+            } catch (error) {
+                resultAmount.textContent = "輸入錯誤";
+                console.error(error);
+            }
         }
 
         function drawChart(data) {
