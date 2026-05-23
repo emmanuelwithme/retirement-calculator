@@ -40,11 +40,11 @@
                     <div class="flex justify-between items-center mb-2">
                         <label class="text-sm font-medium text-slate-700">退休後年數 (n):</label>
                         <div class="flex items-center">
-                            <input type="number" id="numN" value="30" min="1" max="100" class="editable-num text-indigo-600 font-bold bg-indigo-50 border border-transparent hover:border-indigo-200 rounded-lg px-2 py-1 w-16 text-center focus:bg-white focus:border-indigo-500">
+                            <input type="number" id="numN" value="30" min="0" max="100" class="editable-num text-indigo-600 font-bold bg-indigo-50 border border-transparent hover:border-indigo-200 rounded-lg px-2 py-1 w-16 text-center focus:bg-white focus:border-indigo-500">
                             <span class="ml-2 text-sm text-slate-600">年</span>
                         </div>
                     </div>
-                    <input type="range" id="inputN" min="10" max="60" step="1" value="30" class="w-full accent-indigo-600">
+                    <input type="range" id="inputN" min="0" max="60" step="1" value="30" class="w-full accent-indigo-600">
                 </div>
 
                 <!-- Return rate -->
@@ -136,8 +136,9 @@
                 throw new Error("參數必須是有效數字");
             }
 
-            if (n < 1) {
-                throw new Error("退休年數必須至少為 1 年");
+            // 修改防呆：允許 0 年，但不允許負數
+            if (n < 0) {
+                throw new Error("退休年數不能為負數");
             }
 
             if (P < 0) {
@@ -152,7 +153,8 @@
                 throw new Error("年通膨率不能小於或等於 -100%");
             }
 
-            if (P === 0) {
+            // 如果年數為 0，或是不花錢，直接回傳 0 元
+            if (n === 0 || P === 0) {
                 return 0;
             }
 
@@ -191,7 +193,8 @@
                 const rRaw = getNumberValue(numR, 4.0);
                 const gRaw = getNumberValue(numG, 2.0);
 
-                const n = Math.floor(clamp(nRaw, 1, 100));
+                // 將下限改成 0
+                const n = Math.floor(clamp(nRaw, 0, 100));
                 const r = clamp(rRaw, -99.9, 100) / 100;
                 const g = clamp(gRaw, -99.9, 100) / 100;
                 const P = Math.max(pMonth, 0) * 12;
