@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小針子的動態退休金試算機</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .editable-num { transition: all 0.2s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-center text-indigo-600 mb-2">小針子的動態退休金試算機 💰</h1>
+        <p class="text-center text-sm text-slate-400 mb-8">網頁&遞迴關係式撰寫 by遠謀</p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h2 class="text-xl font-semibold mb-6 border-b pb-2">參數設定</h2>
+
+                <!-- Monthly Expenses -->
+                <div class="mb-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-medium text-slate-700">每月預計花費:</label>
+                        <div class="flex items-center">
+                            <input type="number" id="inputPMonth" value="20000" step="1000" class="editable-num text-indigo-600 font-bold bg-white border border-indigo-200 rounded-lg px-3 py-1 w-28 text-right focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <span class="ml-2 text-sm text-slate-600">元</span>
+                        </div>
+                    </div>
+                    <div class="text-xs text-slate-500 text-right">(每年花費: <span id="valPYear">240,000</span> 元)</div>
+                </div>
+
+                <!-- N years -->
+                <div class="mb-5">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-medium text-slate-700">退休後年數 (n):</label>
+                        <div class="flex items-center">
+                            <input type="number" id="numN" value="30" min="1" max="100" class="editable-num text-indigo-600 font-bold bg-indigo-50 border border-transparent hover:border-indigo-200 rounded-lg px-2 py-1 w-16 text-center focus:bg-white focus:border-indigo-500">
+                            <span class="ml-2 text-sm text-slate-600">年</span>
+                        </div>
+                    </div>
+                    <input type="range" id="inputN" min="10" max="60" step="1" value="30" class="w-full accent-indigo-600">
+                </div>
+
+                <!-- Return rate -->
+                <div class="mb-5">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-medium text-slate-700">投資年報酬率 (r):</label>
+                        <div class="flex items-center">
+                            <input type="number" id="numR" value="4.0" step="0.1" class="editable-num text-indigo-600 font-bold bg-indigo-50 border border-transparent hover:border-indigo-200 rounded-lg px-2 py-1 w-20 text-center focus:bg-white focus:border-indigo-500">
+                            <span class="ml-2 text-sm text-slate-600">%</span>
+                        </div>
+                    </div>
+                    <input type="range" id="inputR" min="0" max="15" step="0.1" value="4.0" class="w-full accent-indigo-600">
+                </div>
+
+                <!-- Inflation -->
+                <div class="mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-medium text-slate-700">年通膨率 (g):</label>
+                        <div class="flex items-center">
+                            <input type="number" id="numG" value="2.0" step="0.1" class="editable-num text-indigo-600 font-bold bg-indigo-50 border border-transparent hover:border-indigo-200 rounded-lg px-2 py-1 w-20 text-center focus:bg-white focus:border-indigo-500">
+                            <span class="ml-2 text-sm text-slate-600">%</span>
+                        </div>
+                    </div>
+                    <input type="range" id="inputG" min="0" max="10" step="0.1" value="2.0" class="w-full accent-indigo-600">
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 flex flex-col gap-6">
+                <div class="bg-gradient-to-br from-indigo-500 to-indigo-700 p-8 rounded-2xl shadow-lg text-white text-center flex flex-col justify-center items-center relative overflow-hidden">
+                    <p class="text-indigo-100 mb-2 font-medium">現在開始，你需要存到的總資產為</p>
+                    <div class="text-5xl md:text-6xl font-bold tracking-tight mb-2">
+                        $<span id="resultAmount">0</span>
+                    </div>
+                    <p class="text-indigo-200 text-sm">確保在第 <span id="resN" class="font-bold"></span> 年剛好花完</p>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex-grow">
+                    <h3 class="text-lg font-semibold text-slate-700 mb-4">退休資產消耗歷程</h3>
+                    <div class="relative w-full h-64 md:h-[400px]">
+                        <canvas id="assetChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const inputPMonth = document.getElementById('inputPMonth');
+        const numN = document.getElementById('numN');
+        const numR = document.getElementById('numR');
+        const numG = document.getElementById('numG');
+        const valPYear = document.getElementById('valPYear');
+
+        const inputN = document.getElementById('inputN');
+        const inputR = document.getElementById('inputR');
+        const inputG = document.getElementById('inputG');
+
+        const resultAmount = document.getElementById('resultAmount');
+        const resN = document.getElementById('resN');
+
+        let chartInstance = null;
+
+        const formatMoney = (num) => Math.round(num).toLocaleString('zh-TW');
+
+        function simulate(initial_asset, n, r, g, P) {
+            let asset = initial_asset;
+            let history = [asset];
+            for (let i = 1; i <= n; i++) {
+                let withdraw = P * Math.pow(1 + g, i - 1);
+                asset = (asset - withdraw) * (1 + r);
+                history.push(asset > 0 ? asset : 0);
+            }
+            return { final_asset: asset, history: history };
+        }
+
+        function findInitialAsset(n, r, g, P) {
+            let low = 0, high = Math.max(P * n, 1);
+            
+            // 動態尋找安全的上限值 (Exponential Search)
+            while (simulate(high, n, r, g, P).final_asset < 0) {
+                high *= 2;
+            }
+
+            for (let i = 0; i < 100; i++) {
+                let mid = (low + high) / 2;
+                if (simulate(mid, n, r, g, P).final_asset > 0) high = mid;
+                else low = mid;
+            }
+            return (low + high) / 2;
+        }
+
+        function updateApp() {
+            const pMonth = parseFloat(inputPMonth.value) || 0;
+            const n = parseInt(numN.value) || 0;
+            const r = parseFloat(numR.value) / 100 || 0;
+            const g = parseFloat(numG.value) / 100 || 0;
+            const P = pMonth * 12;
+
+            valPYear.textContent = formatMoney(P);
+            resN.textContent = n;
+            const required = findInitialAsset(n, r, g, P);
+            resultAmount.textContent = formatMoney(required);
+
+            const data = simulate(required, n, r, g, P).history;
+            drawChart(data);
+        }
+
+        function drawChart(data) {
+            const ctx = document.getElementById('assetChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: data.length}, (_, i) => i),
+                    datasets: [{
+                        data: data,
+                        borderColor: '#4f46e5',
+                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        [inputPMonth, numN, numR, numG].forEach(el => el.addEventListener('input', (e) => {
+            const id = e.target.id;
+            if (id === 'numN') inputN.value = e.target.value;
+            if (id === 'numR') inputR.value = e.target.value;
+            if (id === 'numG') inputG.value = e.target.value;
+            updateApp();
+        }));
+
+        [inputN, inputR, inputG].forEach(el => el.addEventListener('input', (e) => {
+            if (e.target.id === 'inputN') numN.value = e.target.value;
+            if (e.target.id === 'inputR') numR.value = e.target.value;
+            if (e.target.id === 'inputG') numG.value = e.target.value;
+            updateApp();
+        }));
+
+        updateApp();
+    </script>
+</body>
+</html>
